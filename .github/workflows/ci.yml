@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: ${{ matrix.os }} / Python ${{ matrix.python-version }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+        python-version: ['3.9', '3.13']
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Check Windows launcher
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: .\harness.cmd --help
+
+      - name: Check macOS launcher
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          chmod +x ./harness
+          sh -n ./harness
+          ./harness --help
+
+      - name: Run distribution tests
+        run: python -B tools/test_harness.py -q
+
+      - name: Run launcher contract tests
+        run: python -B tools/test_launcher.py -q
+
+      - name: Run Core contract tests
+        run: |
+          python -B core/scripts/test_dev_grill_contract.py -q
+          python -B core/scripts/test_dev_resume_contract.py -q
+          python -B core/scripts/test_intake.py -q
+          python -B core/scripts/test_quality_gate.py -q
+          python -B core/scripts/test_review_artifact.py -q
+          python -B core/scripts/test_session_handoff.py

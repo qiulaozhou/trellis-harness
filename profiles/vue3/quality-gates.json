@@ -1,0 +1,143 @@
+{
+  "review": {"profile": "vue3"},
+  "grill": {"profile": "vue3"},
+  "fast": [
+    {
+      "id": "git-diff-check",
+      "description": "Check unstaged whitespace errors",
+      "enabled": true,
+      "required": true,
+      "command": ["git", "--no-optional-locks", "diff", "--check"],
+      "scope": "unstaged tracked diff",
+      "side_effect_level": "none"
+    },
+    {
+      "id": "git-cached-diff-check",
+      "description": "Check staged whitespace errors",
+      "enabled": true,
+      "required": true,
+      "command": ["git", "--no-optional-locks", "diff", "--cached", "--check"],
+      "scope": "staged tracked diff",
+      "side_effect_level": "none"
+    },
+    {
+      "id": "targeted-eslint",
+      "description": "Lint scoped JavaScript and TypeScript files",
+      "enabled": true,
+      "required": true,
+      "runner": "targeted-eslint",
+      "scope": "Task Verification Scope JavaScript and TypeScript files",
+      "side_effect_level": "none"
+    },
+    {
+      "id": "prettier-check",
+      "description": "Check formatting for supported scoped files",
+      "enabled": true,
+      "required": true,
+      "runner": "prettier-check",
+      "scope": "Task Verification Scope supported files",
+      "side_effect_level": "none"
+    },
+    {
+      "id": "typecheck",
+      "description": "Run TypeScript checking when scoped TypeScript files exist",
+      "enabled": true,
+      "required": true,
+      "runner": "typecheck",
+      "scope": "Task Verification Scope TypeScript files",
+      "side_effect_level": "none"
+    }
+  ],
+  "full": [
+    {
+      "id": "git-diff-check",
+      "description": "Check unstaged whitespace errors",
+      "enabled": true,
+      "required": true,
+      "command": ["git", "--no-optional-locks", "diff", "--check"],
+      "scope": "unstaged tracked diff",
+      "side_effect_level": "none"
+    },
+    {
+      "id": "git-cached-diff-check",
+      "description": "Check staged whitespace errors",
+      "enabled": true,
+      "required": true,
+      "command": ["git", "--no-optional-locks", "diff", "--cached", "--check"],
+      "scope": "staged tracked diff",
+      "side_effect_level": "none"
+    },
+    {
+      "id": "targeted-eslint",
+      "description": "Lint scoped JavaScript and TypeScript files",
+      "enabled": true,
+      "required": true,
+      "runner": "targeted-eslint",
+      "scope": "Task Verification Scope JavaScript and TypeScript files",
+      "side_effect_level": "none"
+    },
+    {
+      "id": "prettier-check",
+      "description": "Check formatting for supported scoped files",
+      "enabled": true,
+      "required": true,
+      "runner": "prettier-check",
+      "scope": "Task Verification Scope supported files",
+      "side_effect_level": "none"
+    },
+    {
+      "id": "typecheck",
+      "description": "Run TypeScript checking when scoped TypeScript files exist",
+      "enabled": true,
+      "required": true,
+      "runner": "typecheck",
+      "scope": "Task Verification Scope TypeScript files",
+      "side_effect_level": "none"
+    },
+    {
+      "id": "full-eslint",
+      "description": "Run the project lint script",
+      "enabled": true,
+      "required": true,
+      "runner": "full-lint",
+      "scope": "configured project lint scope",
+      "side_effect_level": "none"
+    },
+    {
+      "id": "full-typecheck",
+      "description": "Run full TypeScript checking without output",
+      "enabled": true,
+      "required": true,
+      "runner": "full-typecheck",
+      "scope": "configured TypeScript project scope",
+      "side_effect_level": "none"
+    },
+    {
+      "id": "tests",
+      "description": "Run the configured test script",
+      "enabled": true,
+      "required": true,
+      "runner": "tests",
+      "scope": "package test script when configured",
+      "side_effect_level": "none"
+    },
+    {
+      "id": "acceptance-criteria",
+      "description": "Require evidence for Task acceptance criteria",
+      "enabled": true,
+      "required": true,
+      "runner": "acceptance-criteria",
+      "scope": "Task PRD and verification evidence",
+      "side_effect_level": "none"
+    },
+    {
+      "id": "build-readiness",
+      "description": "Run the project build only with explicit side-effect authorization",
+      "enabled": true,
+      "required": true,
+      "runner": "build",
+      "scope": "project build command",
+      "side_effect_level": "repo_write"
+    }
+  ]
+}

@@ -1,0 +1,25 @@
+# Python caches and test output
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Local environments and secrets
+.venv/
+venv/
+env/
+ENV/
+.env
+.env.*
+!.env.example
+
+# Operating-system and editor files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Local logs
+*.log
+
+# Internal planning scratch
+docs/superpowers/
