@@ -1,5 +1,5 @@
 {
-  "harness_version": "0.3.0",
+  "harness_version": "0.3.1",
   "schema_version": 1,
   "trellis_compatibility": {
     "minimum_project_version": "0.6.12",
@@ -10,7 +10,7 @@
     {
       "source": "core/skills/dev-start/SKILL.md",
       "target": ".agents/skills/dev-start/SKILL.md",
-      "sha256": "d5368cee2db2cafd3f52b7aaecdfa45b538e790ed79e96d0d1fd8d0722ad6fec"
+      "sha256": "16ce6a0121e0c00e9f71492fb07b2d0cbf579f55d34a19e190f1700528449369"
     },
     {
       "source": "core/skills/dev-grill/SKILL.md",
@@ -30,12 +30,12 @@
     {
       "source": "core/skills/dev-verify/SKILL.md",
       "target": ".agents/skills/dev-verify/SKILL.md",
-      "sha256": "810ec8747dc9edf97b3cef2340f6de39d03fd0fb3430ea578960c8c23e94259d"
+      "sha256": "ff1fa592cbf32d54ae97d0bb0dcd09eea62d35fe4cbfb8cf6e1cc9738dc9109e"
     },
     {
       "source": "core/skills/dev-review/SKILL.md",
       "target": ".agents/skills/dev-review/SKILL.md",
-      "sha256": "f468c4f41b4a8a955899d9c73e35b9cd4b6a6d8ed84d4a558f40ab2291716eae"
+      "sha256": "64a36c20ee5e32c6dcaf6ac95a964cb3268cdbe342c4ccacd6f656083744e870"
     },
     {
       "source": "core/skills/dev-review/references/common.md",
@@ -65,7 +65,7 @@
     {
       "source": "core/scripts/session_handoff.py",
       "target": ".trellis/scripts/harness/session_handoff.py",
-      "sha256": "e15c4cb8f2c4dd6984288e69c2b42fe7d84578df1ce2f5f1d7430e643f4b0d56"
+      "sha256": "3e55b558c0d1f43bad8cd03bc38d18c23b8f6b8684faa11b1556c7ca9e7f3103"
     },
     {
       "source": "core/scripts/test_session_handoff.py",
@@ -95,12 +95,12 @@
     {
       "source": "core/scripts/quality_gate.py",
       "target": ".trellis/scripts/harness/quality_gate.py",
-      "sha256": "e26337f021ddbda94c4dfa364e8cb4fc8ddf444d75099ccc4964174726878095"
+      "sha256": "d850fae54b45d0702ac0d6919cd2b89c78a35ca0d5c7bf0ee71bab804989375f"
     },
     {
       "source": "core/scripts/test_quality_gate.py",
       "target": ".trellis/scripts/harness/test_quality_gate.py",
-      "sha256": "8469306b41a10f4760c9eed1e33b630a49374c8ae7411f4ddd34fc8346e65912"
+      "sha256": "31571c22441a40a9b55b257ded572ce3fc79b06b65d21e41d4190883b1b70a44"
     },
     {
       "source": "core/scripts/review_artifact.py",
@@ -115,12 +115,12 @@
     {
       "source": "core/spec/agent-development-harness.md",
       "target": ".trellis/spec/agent-development-harness.md",
-      "sha256": "4cfd0999554ea16da57bd01c4e6b0f83f6ff78d96418f42bb9383731461f99c5"
+      "sha256": "5b6d7d39f35b1097fd7cde5cdb2ec0448a1a8f9dab20b341a13e31eac0fa24fc"
     },
     {
       "source": "core/spec/agent-quality-gates.md",
       "target": ".trellis/spec/agent-quality-gates.md",
-      "sha256": "3dc2a879e9d7e05dafe7ac7dff8a1d2a89b7f49d4f337c575320f4c13020cf30"
+      "sha256": "ef1e0e15a8995968999e608e5e3c70cf640024d4c12ae937c4a68d9ca5a7aab3"
     }
   ],
   "profiles": [

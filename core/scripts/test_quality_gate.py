@@ -154,6 +154,43 @@ class QualityGateTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "runner must be one of"):
             quality_gate.load_config(workspace)
 
+    def test_write_scope_creates_and_updates_explicit_scope(self) -> None:
+        """显式文件清单可创建并覆盖同一 Task 的 Verification Scope。"""
+        workspace = self.make_workspace({"fast": [], "full": []})
+        task = self.create_scope(workspace, ["src/old.ts"])
+
+        created = quality_gate.write_scope(
+            workspace,
+            task,
+            ["src/a.ts", "src/a.ts", "src/b.ts"],
+            ["docs/note.md"],
+        )
+
+        self.assertEqual(created["task"], ".trellis/tasks/task")
+        self.assertEqual(created["source"], "explicit")
+        self.assertEqual(created["include"], ["src/a.ts", "src/b.ts"])
+        self.assertEqual(created["exclude"], ["docs/note.md"])
+        self.assertRegex(created["updated_at"], r"^\d{4}-\d{2}-\d{2}T")
+        saved = json.loads((task / "verification-scope.json").read_text(encoding="utf-8"))
+        self.assertEqual(saved, created)
+
+    def test_write_scope_rejects_empty_and_escaping_paths(self) -> None:
+        """空 scope 与仓库外路径不得留下 artifact。"""
+        workspace = self.make_workspace({"fast": [], "full": []})
+        task = workspace / ".trellis" / "tasks" / "task"
+        task.mkdir(parents=True)
+        (workspace / "src").mkdir()
+        (task / "task.json").write_text(json.dumps({"status": "in_progress"}), encoding="utf-8")
+
+        with self.assertRaisesRegex(ValueError, "at least one include"):
+            quality_gate.write_scope(workspace, task, [], [])
+        with self.assertRaisesRegex(ValueError, "escapes repository"):
+            quality_gate.write_scope(workspace, task, ["../outside.ts"], [])
+        for invalid in (".", "src/..", "src"):
+            with self.subTest(invalid=invalid), self.assertRaisesRegex(ValueError, "regular file path"):
+                quality_gate.write_scope(workspace, task, [invalid], [])
+        self.assertFalse((task / "verification-scope.json").exists())
+
     def test_run_statuses_and_overall(self) -> None:
         """验证 pass、fail、blocked 与 required 汇总优先级。"""
         workspace = self.make_workspace(
@@ -199,7 +236,8 @@ class QualityGateTests(unittest.TestCase):
                 "full": [],
             }
         )
-        result = quality_gate.run_gate("fast", quality_gate.load_config(workspace), self.fake_snapshot(workspace), False)
+        snapshot = quality_gate.session_handoff.snapshot(workspace)
+        result = quality_gate.run_gate("fast", quality_gate.load_config(workspace), snapshot, False)
         self.assertEqual([item["status"] for item in result["checks"]], ["pass", "fail", "blocked", "skipped"])
         self.assertEqual(result["overall_status"], "fail")
 
@@ -227,7 +265,7 @@ class QualityGateTests(unittest.TestCase):
                         "id": "build-readiness",
                         "description": "build",
                         "enabled": True,
-                        "required": True,
+                        "required": False,
                         "runner": "build",
                         "scope": "production",
                         "side_effect_level": "external",
@@ -235,15 +273,16 @@ class QualityGateTests(unittest.TestCase):
                 ],
             }
         )
-        result = quality_gate.run_gate("full", quality_gate.load_config(workspace), self.fake_snapshot(workspace), False)
+        snapshot = quality_gate.session_handoff.snapshot(workspace)
+        result = quality_gate.run_gate("full", quality_gate.load_config(workspace), snapshot, False)
         self.assertEqual(result["checks"][0]["status"], "skipped")
         self.assertEqual(result["checks"][0]["evidence"], "no configured test suite")
         self.assertEqual(result["checks"][1]["status"], "blocked")
         self.assertIn("Build requires explicit side-effect authorization.", result["checks"][1]["evidence"])
-        self.assertEqual(result["overall_status"], "blocked")
+        self.assertEqual(result["overall_status"], "pass")
 
-    def test_acceptance_requires_evidence(self) -> None:
-        """没有通用 Acceptance Criteria 证据时不能自动标记通过。"""
+    def test_legacy_acceptance_runner_delegates_without_blocking(self) -> None:
+        """旧 profile 的 Acceptance runner 交回 Trellis Check，不永久阻塞 Full Gate。"""
         workspace = self.make_workspace(
             {
                 "fast": [],
@@ -260,10 +299,122 @@ class QualityGateTests(unittest.TestCase):
                 ],
             }
         )
-        result = quality_gate.run_gate("full", quality_gate.load_config(workspace), self.fake_snapshot(workspace), False)
-        self.assertEqual(result["checks"][0]["status"], "blocked")
-        self.assertIn("Acceptance criteria evidence", result["checks"][0]["evidence"])
-        self.assertEqual(result["overall_status"], "blocked")
+        snapshot = quality_gate.session_handoff.snapshot(workspace)
+        result = quality_gate.run_gate("full", quality_gate.load_config(workspace), snapshot, False)
+        self.assertEqual(result["checks"][0]["status"], "skipped")
+        self.assertIn("Trellis Check", result["checks"][0]["evidence"])
+        self.assertEqual(result["overall_status"], "pass")
+
+    def test_targeted_tools_resolve_only_from_local_node_modules(self) -> None:
+        """Targeted checks 不得通过 npm exec 隐式下载缺失工具。"""
+        workspace = self.make_workspace({"fast": [], "full": []})
+        snapshot = self.fake_snapshot(workspace)
+        scope = {"status": "ready", "files": ["src/a.ts"]}
+        command = quality_gate.resolve_runner(
+            {"runner": "targeted-eslint"}, snapshot, "fast", scope
+        )
+        expected = workspace / "node_modules" / ".bin" / ("eslint.cmd" if sys.platform == "win32" else "eslint")
+        self.assertEqual(command[0], str(expected))
+
+    def test_scope_triggered_typecheck_reports_repository_failure_scope(self) -> None:
+        """TypeScript 由 Task scope 触发但检查全项目，失败范围不能标成 task。"""
+        workspace = self.make_workspace(
+            {
+                "fast": [
+                    {
+                        "id": "typecheck",
+                        "description": "typecheck",
+                        "enabled": True,
+                        "required": True,
+                        "runner": "typecheck",
+                        "scope": "project TypeScript graph",
+                        "side_effect_level": "none",
+                    }
+                ],
+                "full": [],
+            }
+        )
+        snapshot = quality_gate.session_handoff.snapshot(workspace)
+        scope = {"status": "ready", "files": ["src/a.ts"]}
+
+        result = quality_gate.run_gate("fast", quality_gate.load_config(workspace), snapshot, False, scope)
+
+        self.assertEqual(result["checks"][0]["failure_scope"], "repository")
+
+    def test_run_detects_workspace_mutation_and_records_final_snapshot(self) -> None:
+        """声明为无副作用的命令改动工作区时 Gate 失败，artifact 绑定最终状态。"""
+        workspace = self.make_workspace(
+            {
+                "fast": [
+                    {
+                        "id": "mutating-check",
+                        "description": "must stay read-only",
+                        "enabled": True,
+                        "required": True,
+                        "command": [
+                            sys.executable,
+                            "-c",
+                            "from pathlib import Path; Path('generated.txt').write_text('changed', encoding='utf-8')",
+                        ],
+                        "scope": "fixture",
+                        "side_effect_level": "none",
+                    }
+                ],
+                "full": [],
+            }
+        )
+        before = quality_gate.session_handoff.snapshot(workspace)
+
+        result = quality_gate.run_gate("fast", quality_gate.load_config(workspace), before, False)
+
+        self.assertEqual(result["checks"][-1]["id"], "workspace-stability")
+        self.assertEqual(result["checks"][-1]["status"], "fail")
+        self.assertEqual(result["overall_status"], "fail")
+        self.assertTrue(result["workspace_changed_during_gate"])
+        self.assertIn("generated.txt", result["workspace_snapshot"]["untracked_files"])
+        self.assertEqual(result["workspace_fingerprint"], result["workspace_snapshot"]["diff_fingerprint"])
+
+    def test_written_verification_artifact_is_immediately_current(self) -> None:
+        """正式 run 写入自己的 runtime artifact 后仍绑定同一代码状态。"""
+        workspace = self.make_workspace({"fast": [], "full": []})
+        (workspace / "src").mkdir()
+        (workspace / "src/a.ts").write_text("export const a = 1\n", encoding="utf-8")
+        task = self.create_scope(workspace, ["src/a.ts"])
+        script = Path(quality_gate.__file__)
+
+        run = subprocess.run(
+            [
+                sys.executable,
+                str(script),
+                "--workspace",
+                str(workspace),
+                "run",
+                "fast",
+                "--task",
+                str(task),
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        artifact = Path(json.loads(run.stdout)["verification_artifact"])
+        saved = json.loads(artifact.read_text(encoding="utf-8"))
+        current = subprocess.run(
+            [
+                sys.executable,
+                str(script),
+                "--workspace",
+                str(workspace),
+                "check-current",
+                str(artifact),
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+        self.assertIn("started_snapshot", saved)
+        self.assertTrue(json.loads(current.stdout)["workspace_current"])
 
     def test_unrelated_workspace_change_keeps_scope_current(self) -> None:
         """workspace 有无关文档变化时，Task scope 仍可继承。"""
@@ -323,8 +474,10 @@ class QualityGateTests(unittest.TestCase):
         (workspace / "docs/unrelated.md").write_text("unrelated\n", encoding="utf-8")
         snapshot = quality_gate.session_handoff.snapshot(workspace)
         scope = quality_gate.infer_scope(workspace, workspace / ".trellis/tasks/missing")
+        plan = quality_gate.plan_gate("fast", quality_gate.load_config(workspace), snapshot, scope)
         result = quality_gate.run_gate("fast", quality_gate.load_config(workspace), snapshot, False, scope)
         self.assertEqual(scope["status"], "ambiguous")
+        self.assertEqual(plan["checks"][0]["status"], "blocked")
         self.assertEqual(result["checks"][0]["status"], "blocked")
         self.assertIn("verification_scope_status: ambiguous", result["checks"][0]["evidence"])
 

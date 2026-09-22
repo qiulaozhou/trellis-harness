@@ -10,6 +10,7 @@ from pathlib import Path
 import re
 import subprocess
 import sys
+import tempfile
 import time
 from datetime import datetime, timezone
 from typing import Any
@@ -121,6 +122,12 @@ def normalize_scope_path(value: Any, workspace: Path) -> str:
     resolved = (workspace / candidate).resolve(strict=False)
     if not resolved.is_relative_to(workspace):
         raise ValueError(f"verification scope path escapes repository: {value}")
+    if (
+        any(part in {"", ".", ".."} for part in raw.split("/"))
+        or resolved == workspace
+        or resolved.exists() and not resolved.is_file()
+    ):
+        raise ValueError(f"verification scope path must be a regular file path: {value}")
     return candidate.as_posix()
 
 
@@ -205,6 +212,40 @@ def load_scope(workspace: Path, task: str | Path | None) -> dict[str, Any]:
     }
 
 
+def write_scope(
+    workspace: Path,
+    task: str | Path,
+    include: list[str],
+    exclude: list[str],
+) -> dict[str, Any]:
+    """Persist one explicit Task Verification Scope from a reviewed file list."""
+    task_dir = task_path(workspace, task)
+    normalized_include = sorted({normalize_scope_path(item, workspace) for item in include})
+    normalized_exclude = sorted({normalize_scope_path(item, workspace) for item in exclude})
+    if not normalized_include:
+        raise ValueError("verification scope requires at least one include path.")
+    overlap = sorted(set(normalized_include) & set(normalized_exclude))
+    if overlap:
+        raise ValueError(f"verification scope exclude cannot hide included files: {', '.join(overlap)}")
+    data = {
+        "task": task_dir.relative_to(workspace).as_posix(),
+        "source": "explicit",
+        "include": normalized_include,
+        "exclude": normalized_exclude,
+        "updated_at": utc_now(),
+    }
+    artifact = task_dir / "verification-scope.json"
+    payload = (json.dumps(data, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
+    with tempfile.NamedTemporaryFile(dir=task_dir, delete=False) as handle:
+        temporary = Path(handle.name)
+        handle.write(payload)
+    try:
+        os.replace(temporary, artifact)
+    finally:
+        temporary.unlink(missing_ok=True)
+    return data
+
+
 def scope_files(scope: dict[str, Any]) -> list[str]:
     """返回实际负责验证的 scope 文件，exclude 只能收窄显式 include。"""
     excluded = set(scope.get("exclude", []))
@@ -285,6 +326,13 @@ def npm_command(*args: str) -> list[str]:
     return [executable, *args]
 
 
+def local_node_tool(snapshot: dict[str, Any], name: str, *args: str) -> list[str]:
+    """Resolve an already-installed project tool without invoking a package downloader."""
+    executable = name + ".cmd" if os.name == "nt" else name
+    path = Path(snapshot["workspace_path"]) / "node_modules" / ".bin" / executable
+    return [str(path), *args]
+
+
 def command_text(command: list[str] | str | None) -> str:
     """将配置或运行时命令转换为不含完整输出的可读描述。"""
     if command is None:
@@ -335,15 +383,15 @@ def resolve_runner(
     if runner in {"targeted-eslint", "prettier-check", "typecheck"} and candidate_files is None:
         candidate_files = []
     if runner == "targeted-eslint":
-        return npm_command("exec", "--", "eslint", "--no-error-on-unmatched-pattern", *current_source_files(snapshot, SOURCE_EXTENSIONS, candidate_files))
+        return local_node_tool(snapshot, "eslint", "--no-error-on-unmatched-pattern", *current_source_files(snapshot, SOURCE_EXTENSIONS, candidate_files))
     if runner == "prettier-check":
-        return npm_command("exec", "--", "prettier", "--check", *current_source_files(snapshot, PRETTIER_EXTENSIONS, candidate_files))
+        return local_node_tool(snapshot, "prettier", "--check", *current_source_files(snapshot, PRETTIER_EXTENSIONS, candidate_files))
     if runner == "typecheck":
-        return npm_command("exec", "--", "tsc", "--noEmit", "--incremental", "false", "--pretty", "false")
+        return local_node_tool(snapshot, "tsc", "--noEmit", "--incremental", "false", "--pretty", "false")
     if runner == "full-lint":
         return npm_command("run", "lint")
     if runner == "full-typecheck":
-        return npm_command("exec", "--", "tsc", "--noEmit", "--incremental", "false", "--pretty", "false")
+        return local_node_tool(snapshot, "tsc", "--noEmit", "--incremental", "false", "--pretty", "false")
     if runner == "tests":
         return npm_command("test")
     if runner == "acceptance-criteria":
@@ -412,7 +460,11 @@ def plan_gate(
         if not check["enabled"]:
             item.update({"action": "skip", "status": "skipped", "reason": "disabled"})
         elif check.get("runner") == "acceptance-criteria":
-            item.update({"action": "block", "status": "blocked", "reason": "Acceptance criteria evidence requires task-specific verification."})
+            item.update({"action": "skip", "status": "skipped", "reason": "Acceptance criteria are delegated to Trellis Check."})
+        elif check.get("runner") in {"targeted-eslint", "prettier-check", "typecheck"} and (
+            not scope or scope.get("status") != "ready"
+        ):
+            item.update({"action": "block", "status": "blocked", "reason": "verification_scope_status: ambiguous"})
         elif check["side_effect_level"] != "none":
             reason = (
                 "Build requires explicit side-effect authorization."
@@ -479,9 +531,9 @@ def run_gate(
             "side_effect_level": check["side_effect_level"],
             "failure_scope": (
                 "task"
-                if check.get("runner") in {"targeted-eslint", "prettier-check", "typecheck", "acceptance-criteria"}
+                if check.get("runner") in {"targeted-eslint", "prettier-check", "acceptance-criteria"}
                 else "repository"
-                if check.get("runner") in {"full-lint", "full-typecheck", "tests", "build"}
+                if check.get("runner") in {"typecheck", "full-lint", "full-typecheck", "tests", "build"}
                 else "unknown"
             ),
             "status": "skipped",
@@ -494,8 +546,7 @@ def run_gate(
             results.append(base)
             continue
         if check.get("runner") == "acceptance-criteria":
-            base["status"] = "blocked"
-            base["evidence"] = "Acceptance criteria evidence requires task-specific verification."
+            base["evidence"] = "Acceptance criteria are delegated to Trellis Check."
             results.append(base)
             continue
         if check["side_effect_level"] != "none" and not allow_side_effects:
@@ -540,23 +591,49 @@ def run_gate(
             base["warning_count"] = warning_count
         base["status"] = status_override or ("pass" if exit_code == 0 else "fail")
         results.append(base)
+    final_snapshot = session_handoff.snapshot(Path(snapshot["workspace_path"]))
+    workspace_changed = any(
+        snapshot.get(key) != final_snapshot.get(key)
+        for key in ("branch", "head", "workspace_path", "diff_fingerprint")
+    )
+    if workspace_changed:
+        results.append(
+            {
+                "id": "workspace-stability",
+                "command": "",
+                "runner": None,
+                "scope": "workspace state during gate execution",
+                "required": True,
+                "side_effect_level": "none",
+                "failure_scope": "repository",
+                "status": "fail",
+                "exit_code": None,
+                "duration": 0.0,
+                "evidence": "Workspace changed while the gate was running; previous check results are not bound to the final state.",
+            }
+        )
+    final_scope = scope
+    if scope and scope.get("status") == "ready" and scope.get("task"):
+        final_scope = resolve_scope(Path(final_snapshot["workspace_path"]), scope["task"], final_snapshot)
     finished_at = utc_now()
     result = {
         "gate": gate,
         "started_at": started_at,
         "finished_at": finished_at,
-        "repository": snapshot["repository_root"],
-        "branch": snapshot["branch"],
-        "HEAD": snapshot["head"],
-        "diff_fingerprint": snapshot["diff_fingerprint"],
-        "workspace_snapshot": snapshot,
-        "workspace_fingerprint": snapshot["diff_fingerprint"],
-        "verification_scope": scope,
-        "verification_scope_status": scope.get("status") if scope else "ambiguous",
-        "scope_fingerprint": scope.get("fingerprint") if scope else "",
-        "workspace_changed_files": changed_files(snapshot),
-        "unrelated_workspace_changes": scope.get("unrelated_workspace_changes", []) if scope else changed_files(snapshot),
-        "snapshot": snapshot,
+        "repository": final_snapshot["repository_root"],
+        "branch": final_snapshot["branch"],
+        "HEAD": final_snapshot["head"],
+        "diff_fingerprint": final_snapshot["diff_fingerprint"],
+        "started_snapshot": snapshot,
+        "workspace_snapshot": final_snapshot,
+        "workspace_fingerprint": final_snapshot["diff_fingerprint"],
+        "workspace_changed_during_gate": workspace_changed,
+        "verification_scope": final_scope,
+        "verification_scope_status": final_scope.get("status") if final_scope else "ambiguous",
+        "scope_fingerprint": final_scope.get("fingerprint") if final_scope else "",
+        "workspace_changed_files": changed_files(final_snapshot),
+        "unrelated_workspace_changes": final_scope.get("unrelated_workspace_changes", []) if final_scope else changed_files(final_snapshot),
+        "snapshot": final_snapshot,
         "checks": results,
         "overall_status": overall_status(results),
     }
@@ -576,6 +653,7 @@ def write_verification(task: Path, workspace: Path, result: dict[str, Any]) -> P
         "Task": task.relative_to(task.parents[2]).as_posix(),
         "Gate": result["gate"],
         "timestamp": result["finished_at"],
+        "started_snapshot": result["started_snapshot"],
         "snapshot": result["snapshot"],
         "workspace_snapshot": result.get("workspace_snapshot", result["snapshot"]),
         "workspace_fingerprint": result.get("workspace_fingerprint", result["snapshot"]["diff_fingerprint"]),
@@ -675,11 +753,20 @@ def main() -> int:
         command.add_argument("--task", help="Task path used to resolve Verification Scope")
         if name == "run":
             command.add_argument("--allow-side-effects", action="store_true")
+    scope_parser = commands.add_parser("scope")
+    scope_parser.add_argument("--task", required=True)
+    scope_parser.add_argument("--include", action="append", required=True)
+    scope_parser.add_argument("--exclude", action="append", default=[])
     current = commands.add_parser("check-current")
     current.add_argument("verification")
     args = parser.parse_args()
     try:
         workspace = session_handoff.repository(args.workspace)
+        if args.command == "scope":
+            data = write_scope(workspace, args.task, args.include, args.exclude)
+            task_dir = task_path(workspace, args.task)
+            print(json.dumps({"artifact": str(task_dir / "verification-scope.json"), **data}, ensure_ascii=False, indent=2))
+            return 0
         if args.command == "check-current":
             path = Path(args.verification)
             if not path.is_absolute():

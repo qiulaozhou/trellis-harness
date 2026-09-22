@@ -43,10 +43,10 @@ class HarnessDistributionTests(unittest.TestCase):
         target = self.root / "release-next"
         shutil.copytree(self.release, target)
         changed = target / "core" / "spec" / "agent-quality-gates.md"
-        changed.write_text(changed.read_text(encoding="utf-8") + "\nFixture release 0.3.1.\n", encoding="utf-8")
+        changed.write_text(changed.read_text(encoding="utf-8") + "\nFixture release 0.3.2.\n", encoding="utf-8")
         manifest_path = target / "manifest.json"
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        manifest["harness_version"] = "0.3.1"
+        manifest["harness_version"] = "0.3.2"
         for entry in manifest["managed_core_files"]:
             if entry["source"] == "core/spec/agent-quality-gates.md":
                 entry["sha256"] = hashlib.sha256(changed.read_bytes()).hexdigest()
@@ -165,7 +165,7 @@ class HarnessDistributionTests(unittest.TestCase):
         new_release = self.next_release()
         self.assertEqual(harness.status(project, new_release)["harness_status"], "outdated")
         result = harness.sync(project, new_release)
-        self.assertEqual(result["harness_version"], "0.3.1")
+        self.assertEqual(result["harness_version"], "0.3.2")
         self.assertEqual(result["harness_status"], "current")
 
     def test_sync_preserves_profile_task_handoff_journal_runtime_and_official_hashes(self) -> None:

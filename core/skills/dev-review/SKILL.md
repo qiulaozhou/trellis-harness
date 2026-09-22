@@ -39,6 +39,11 @@ helper 必须返回 ready 的 profile、真实 package versions、router、scope
 review files 和 scope fingerprint。缺 task/handoff/scope、scope ambiguous、profile 与实际
 stack 冲突或 scope 内没有可审查 Git 修改时返回 BLOCKED；不要扩大到整个仓库补偿。
 
+缺少或过期的 `verification-scope.json` 必须先退出 Review，并要求在 `dev-verify fast`
+阶段用 `quality_gate.py scope --task <task-path> --include <repo-relative-file> ...` 建立
+经过核对的显式 scope。Review 本身仍只允许写 `review.json`，不得从全部 dirty 文件猜测
+归属或代写 scope。
+
 ## 2. Load Rules
 
 始终完整读取 `references/common.md`，再按 context 的 `profile` 读取一个 stack profile：

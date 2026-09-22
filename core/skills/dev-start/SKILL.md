@@ -42,6 +42,7 @@ description: 以“dev-start + 真实需求”启动当前项目的 Trellis 开�
 
 ```text
 Development: dev-verify fast
+Verification scope: establish the explicit implementation file list before the first Gate
 Session handoff: dev-checkpoint
 New session: dev-resume <task-path>
 Before completion: dev-verify full

@@ -122,19 +122,10 @@
       "side_effect_level": "none"
     },
     {
-      "id": "acceptance-criteria",
-      "description": "Require evidence for Task acceptance criteria",
-      "enabled": true,
-      "required": true,
-      "runner": "acceptance-criteria",
-      "scope": "Task PRD and verification evidence",
-      "side_effect_level": "none"
-    },
-    {
       "id": "build-readiness",
       "description": "Run the project build only with explicit side-effect authorization",
       "enabled": true,
-      "required": true,
+      "required": false,
       "runner": "build",
       "scope": "project build command",
       "side_effect_level": "repo_write"

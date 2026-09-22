@@ -20,6 +20,7 @@ SECTIONS = (
     "Resume Constraints",
 )
 STATUSES = {"pass", "fail", "blocked", "skipped"}
+SNAPSHOT_PATHS = ("--", ".", ":(exclude,glob).trellis/tasks/*/verification.json")
 
 
 def git(workspace: Path, *args: str, allowed: tuple[int, ...] = (0,)) -> bytes:
@@ -52,16 +53,18 @@ def snapshot(workspace: Path) -> dict:
         "--ignore-submodules=none", "--no-relative", "--no-indent-heuristic",
         "--diff-algorithm=myers", "--src-prefix=a/", "--dst-prefix=b/", "--unified=3",
     )
-    staged = git(workspace, "diff", "--cached", *options, "--binary", "--full-index")
-    unstaged = git(workspace, "diff", *options, "--binary", "--full-index")
+    # verification.json is the Gate's generated runtime artifact; including it would
+    # make a freshly written verification stale itself.
+    staged = git(workspace, "diff", "--cached", *options, "--binary", "--full-index", *SNAPSHOT_PATHS)
+    unstaged = git(workspace, "diff", *options, "--binary", "--full-index", *SNAPSHOT_PATHS)
     staged_files = sorted(os.fsdecode(item) for item in git(
-        workspace, "diff", "--cached", *options, "--name-only", "-z"
+        workspace, "diff", "--cached", *options, "--name-only", "-z", *SNAPSHOT_PATHS
     ).split(b"\0") if item)
     unstaged_files = sorted(os.fsdecode(item) for item in git(
-        workspace, "diff", *options, "--name-only", "-z"
+        workspace, "diff", *options, "--name-only", "-z", *SNAPSHOT_PATHS
     ).split(b"\0") if item)
     untracked_files = sorted(os.fsdecode(item) for item in git(
-        workspace, "ls-files", "--others", "--exclude-standard", "-z"
+        workspace, "ls-files", "--others", "--exclude-standard", "-z", *SNAPSHOT_PATHS
     ).split(b"\0") if item)
     untracked_metadata = []
     for name in untracked_files:

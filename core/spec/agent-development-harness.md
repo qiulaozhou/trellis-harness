@@ -18,15 +18,21 @@ Task Done：只有 Acceptance Criteria、必要验证、Check 以及用户/现�
 
 ## 本机 Python 与只读 Helper
 
-Harness 只依赖 Python 3.9+ 标准库，不安装第三方依赖。PowerShell 中先解析当前机器可用的 Python：
+Harness 只依赖 Python 3.9+ 标准库，不安装第三方依赖。PowerShell 中依次解析当前机器可用的 `python`、`py`：
 
 ```powershell
-$harnessPython = (Get-Command python -ErrorAction Stop).Source
-Test-Path -LiteralPath $harnessPython
+$harnessPython = Get-Command python, py -ErrorAction SilentlyContinue |
+  Select-Object -First 1 -ExpandProperty Source
+```
+
+两者都不可用时，在 Codex 中调用 `load_workspace_dependencies` 只读取得 bundled Python executable，并以该路径设置 `$harnessPython`；不要复制其他机器的绝对路径、修改 PATH 或安装第三方依赖。完成解析并确认路径存在后再执行：
+
+```powershell
+if (-not $harnessPython -or -not (Test-Path -LiteralPath $harnessPython)) { throw "Python 3.9+ is required." }
 & $harnessPython -B -X utf8 .trellis/scripts/harness/session_handoff.py snapshot
 ```
 
-若 `python` 不在 PATH，请将 `$harnessPython` 替换为本机 Python 3.9+ 可执行文件路径；不要复制其他机器的绝对路径、修改 PATH 或安装第三方依赖。下文所有 `task.py` / `add_session.py` / helper 命令均以 `& $harnessPython -B -X utf8` 调用。`-B` 避免写入 Python 缓存。
+下文所有 `task.py` / `add_session.py` / helper 命令均以 `& $harnessPython -B -X utf8` 调用。`-B` 避免写入 Python 缓存。
 
 Helper 四个子命令均可带 `--workspace <当前工作区路径>`，默认 cwd：
 
