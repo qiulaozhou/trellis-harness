@@ -1,8 +1,8 @@
-# Agent Development Harness：Session Checkpoint / Resume
+# Agent Development Harness
 
 ## 适用范围与事实来源
 
-本规范用于同一 Trellis Task 的跨 Codex Session 交接。当前项目为 Trellis 0.6.12 模板、0.6.15 CLI 和本地定制的组合；以实际脚本为准，不升级或修改内置行为。
+本规范约定 Trellis Task 的执行分工和跨 Codex Session 交接。以项目实际脚本和 Harness manifest 的兼容版本为准，不升级或修改内置行为。
 
 | 层 | 职责 |
 | --- | --- |
@@ -15,6 +15,18 @@
 Session End：checkpoint 不等于 task finish、archive 或 finish-work。checkpoint 不调用这些入口，不清除 pointer，不提交、不推送、不改业务代码。Task 状态保持原值。
 
 Task Done：只有 Acceptance Criteria、必要验证、Check 以及用户/现有流程要求的完成条件均满足后，才进入原有 finish-work/archive。handoff 不能授权原任务范围之外的新工作。
+
+## 任务规模与 Agent 分工
+
+按本次增量修改的复杂度、风险和分工收益选择执行方式，不按整个 Task 的大小或修改行数机械决定。此约定是 Trellis 默认 implement/check 子 Agent 流程的轻量例外，已有 active Task 内的后续小改动也适用。
+
+- **轻量修改**：范围局部、逻辑已明确、复用已有接口/处理函数且风险低，例如文案、样式、弹窗属性和按钮显示规则。由主 Agent 直接定位、实现和检查，不再分别启动 implement/check 子 Agent；不为这种例外改写下游 `AGENTS.md`、官方 workflow 或全局 dispatch mode。
+- **需要分工的工作**：较大实现、能并行处理的独立模块、批量重复测试/失败诊断，或风险需要独立复核时，再派发子 Agent。权限、数据一致性、接口契约和复杂并发不能因为改动行数少就省略必要分析与验证。
+- **上下文复用**：优先复用已加载且仍适用的相关事实；仅补读当前修改所需的 Task/spec/源码片段，不反复全文加载任务历史，不为形式上的分工重建上下文。事实缺失或代码已变化时仍须核对。
+- **按需验证**：普通轻量后续修改运行必要的定向 lint、diff 检查或受影响的现有回归；没有新变更、失败或疑点，不重复已通过的检查，也不额外生成一套报告。必要证据可补入既有记录。
+- **保留正式边界**：明确调用 `dev-verify fast/full` 时仍执行对应 Gate；`dev-review` 的只读边界、`dev-resume` 的 STOP 和任务完成前的必要验收不变。定向检查不能冒充 Full Gate，代码变化后的旧证据仍须按 freshness 规则处理。
+
+需要子 Agent 时遵循用户当前的模型、推理强度和授权偏好；没有明确分工收益时优先由主 Agent 完成。
 
 ## 本机 Python 与只读 Helper
 

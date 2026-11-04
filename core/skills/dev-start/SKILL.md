@@ -7,6 +7,8 @@ description: 以“dev-start + 真实需求”启动当前项目的 Trellis 开�
 
 把用户在 `dev-start` 后提供的正文作为真实需求。这个 Skill 只负责入口和路由，不替代 Trellis 的 PRD、Design、Implement，也不修改内置 workflow。
 
+先读取 `.trellis/spec/agent-development-harness.md` 的“任务规模与 Agent 分工”，再选择执行方式：低风险、逻辑明确的局部修改由主 Agent 直接实现和检查，已有 Task 也适用；较大、可并行或需要独立复核的工作再使用子 Agent。此轻量例外优先于默认的 implement/check 派发建议；Task 路由、显式 Gate 和 Skill STOP 边界保持不变。不为采用此规则改写官方 workflow 或项目 AGENTS。
+
 ## 1. 读取状态
 
 读取并遵循 `.agents/skills/trellis-start/SKILL.md`，执行其中的 current state、Phase Index 和 guideline index 加载步骤。以 `.trellis/workflow.md`、当前 Task 状态和项目规范为事实来源。

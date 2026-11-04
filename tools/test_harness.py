@@ -42,11 +42,12 @@ class HarnessDistributionTests(unittest.TestCase):
     def next_release(self) -> Path:
         target = self.root / "release-next"
         shutil.copytree(self.release, target)
-        changed = target / "core" / "spec" / "agent-quality-gates.md"
-        changed.write_text(changed.read_text(encoding="utf-8") + "\nFixture release 0.3.2.\n", encoding="utf-8")
         manifest_path = target / "manifest.json"
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        manifest["harness_version"] = "0.3.2"
+        major, minor, patch = manifest["harness_version"].split(".")
+        manifest["harness_version"] = f"{major}.{minor}.{int(patch) + 1}"
+        changed = target / "core" / "spec" / "agent-quality-gates.md"
+        changed.write_text(changed.read_text(encoding="utf-8") + "\nFixture next release.\n", encoding="utf-8")
         for entry in manifest["managed_core_files"]:
             if entry["source"] == "core/spec/agent-quality-gates.md":
                 entry["sha256"] = hashlib.sha256(changed.read_bytes()).hexdigest()
@@ -100,6 +101,31 @@ class HarnessDistributionTests(unittest.TestCase):
         self.assertEqual(first["harness_status"], "current")
         self.assertEqual(second["written_core_files"], [])
         self.assertEqual(metadata, (project / ".trellis" / "harness" / "manifest.json").read_bytes())
+
+    def test_lightweight_policy_is_distributed_without_rewriting_project_rules(self) -> None:
+        project = self.project("lightweight-routing")
+        rules = project / "AGENTS.md"
+        workflow = project / ".trellis" / "workflow.md"
+        rules.write_text("Project-owned agent rules.\n", encoding="utf-8")
+        workflow.write_text("Project-owned Trellis workflow.\n", encoding="utf-8")
+        protected = {path: path.read_bytes() for path in (rules, workflow)}
+        harness.install(project, self.release, profile="vue3")
+        for target in (
+            ".trellis/spec/agent-development-harness.md",
+            ".agents/skills/dev-start/SKILL.md",
+            ".agents/skills/dev-resume/SKILL.md",
+        ):
+            self.assertTrue(
+                "任务规模与 Agent 分工" in (project / target).read_text(encoding="utf-8"),
+                f"Missing lightweight routing policy: {target}",
+            )
+        result = harness.sync(project, self.next_release())
+        self.assertEqual(result["harness_status"], "current")
+        self.assertIn(
+            "任务规模与 Agent 分工",
+            (project / ".trellis/spec/agent-development-harness.md").read_text(encoding="utf-8"),
+        )
+        self.assertEqual(protected, {path: path.read_bytes() for path in protected})
 
     # dev-review acceptance 16
     def test_new_install_gets_dev_review(self) -> None:
@@ -165,7 +191,7 @@ class HarnessDistributionTests(unittest.TestCase):
         new_release = self.next_release()
         self.assertEqual(harness.status(project, new_release)["harness_status"], "outdated")
         result = harness.sync(project, new_release)
-        self.assertEqual(result["harness_version"], "0.3.2")
+        self.assertEqual(result["harness_version"], harness.load_release(new_release)["harness_version"])
         self.assertEqual(result["harness_status"], "current")
 
     def test_sync_preserves_profile_task_handoff_journal_runtime_and_official_hashes(self) -> None:

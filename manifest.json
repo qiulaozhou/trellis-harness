@@ -1,5 +1,5 @@
 {
-  "harness_version": "0.3.1",
+  "harness_version": "0.3.2",
   "schema_version": 1,
   "trellis_compatibility": {
     "minimum_project_version": "0.6.12",
@@ -10,7 +10,7 @@
     {
       "source": "core/skills/dev-start/SKILL.md",
       "target": ".agents/skills/dev-start/SKILL.md",
-      "sha256": "16ce6a0121e0c00e9f71492fb07b2d0cbf579f55d34a19e190f1700528449369"
+      "sha256": "cd6c8a73d6eb812a03b2f375a1009ae99a9a5773f88a17c9a7ba5d2800a97dd1"
     },
     {
       "source": "core/skills/dev-grill/SKILL.md",
@@ -25,7 +25,7 @@
     {
       "source": "core/skills/dev-resume/SKILL.md",
       "target": ".agents/skills/dev-resume/SKILL.md",
-      "sha256": "ab05a982c9077bb64c72797a2a6021369d3ee58b96494bb9bd0dd2e2b7c585cf"
+      "sha256": "dacc4e9f8a49c53cba8ef6562a8a522cba6e9740a2736fa72100c4a4c341777f"
     },
     {
       "source": "core/skills/dev-verify/SKILL.md",
@@ -115,7 +115,7 @@
     {
       "source": "core/spec/agent-development-harness.md",
       "target": ".trellis/spec/agent-development-harness.md",
-      "sha256": "5b6d7d39f35b1097fd7cde5cdb2ec0448a1a8f9dab20b341a13e31eac0fa24fc"
+      "sha256": "eddf77af84ecbc613dc4232a029ea16ce5bb7905937bcefdd09d8a1781e2b377"
     },
     {
       "source": "core/spec/agent-quality-gates.md",

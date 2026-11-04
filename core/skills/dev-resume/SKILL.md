@@ -9,6 +9,8 @@ description: 根据 handoff.md 在新的 Codex Session 恢复同一个已有 Tre
 和 Session 状态，然后停止。本 Skill 的 STOP 规则优先于 workflow 中对
 implement/check 或继续执行的建议；本 Skill 不创建子 Agent。
 
+恢复后若用户明确要求继续实现，按 `.trellis/spec/agent-development-harness.md` 的“任务规模与 Agent 分工”选择执行方式：轻量后续修改由主 Agent 直接实现和检查，不机械派发两个子 Agent。该后续规则不增加本次 Fast Resume 的读取步骤，也不改变本 Skill 的 STOP。
+
 ## Fast Path（默认）
 
 显式提供 Task 路径时，按以下步骤恢复：Task path → `task.json`/`handoff.md` →

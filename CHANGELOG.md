@@ -4,6 +4,13 @@ All notable changes to Trellis Harness are documented here.
 
 ## Unreleased
 
+## 0.3.2 - 2026-10-13
+
+- Added a lightweight exception to default Agent delegation: the main Agent implements and checks small, understood, low-risk changes directly, including follow-ups within an active Task.
+- Distributed the policy through Core guidance and dev-start/dev-resume entry points, without rewriting downstream AGENTS or official Trellis workflows.
+- Limited routine verification and context reloads to the affected scope while preserving explicit Gates, read-only review, Resume STOP and evidence freshness.
+- Added install/sync coverage for policy delivery and project-owned rule preservation; made next-release test fixtures follow the current patch version.
+
 ## 0.3.1 - 2026-09-22
 
 - Prepared the Development Distribution for a private GitHub repository.
