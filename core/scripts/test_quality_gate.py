@@ -17,7 +17,7 @@ class QualityGateTests(unittest.TestCase):
 
     def make_workspace(self, checks: dict[str, list[dict]]) -> Path:
         """创建包含最小 Git 与质量配置的临时工作区。"""
-        root = Path(tempfile.mkdtemp(prefix="quality-gate-"))
+        root = Path(tempfile.mkdtemp(prefix="quality-gate-")).resolve()
         (root / ".trellis" / "harness").mkdir(parents=True)
         (root / "package.json").write_text(json.dumps({"scripts": {}}), encoding="utf-8")
         (root / ".trellis" / "harness" / "quality-gates.json").write_text(
