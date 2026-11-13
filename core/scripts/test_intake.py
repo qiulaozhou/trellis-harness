@@ -19,7 +19,7 @@ SPEC.loader.exec_module(intake)
 class IntakeTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()
-        self.root = Path(self.temp.name)
+        self.root = Path(self.temp.name).resolve()
         (self.root / ".trellis").mkdir()
 
     def tearDown(self) -> None:

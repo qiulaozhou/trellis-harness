@@ -19,7 +19,7 @@ SKILL = ROOT / "core" / "skills" / "dev-review" / "SKILL.md"
 class DevReviewTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
-        self.workspace = Path(self.temporary.name)
+        self.workspace = Path(self.temporary.name).resolve()
         self.git("init", "-q")
         self.git("config", "user.email", "fixture@example.test")
         self.git("config", "user.name", "Fixture")

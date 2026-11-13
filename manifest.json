@@ -85,7 +85,7 @@
     {
       "source": "core/scripts/test_intake.py",
       "target": ".trellis/scripts/harness/test_intake.py",
-      "sha256": "6f1cd321fe8d28e1387d25e793a7103b530b9c37a140bb8179991fd5e206c6ca"
+      "sha256": "81ace30875c50b2b99d24a346999e59a85e1fc50d38de73917c0630075e6e444"
     },
     {
       "source": "core/scripts/test_dev_grill_contract.py",
@@ -110,7 +110,7 @@
     {
       "source": "core/scripts/test_review_artifact.py",
       "target": ".trellis/scripts/harness/test_review_artifact.py",
-      "sha256": "c7318abcd1d0739ef4814477d8635024285f7f959fc338497c605ba2d74de651"
+      "sha256": "1e9d0d8db1fff7dc3190cdf7ae666e8e924f686772f25f5565101b7649a74ec9"
     },
     {
       "source": "core/spec/agent-development-harness.md",
