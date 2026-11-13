@@ -81,6 +81,7 @@ def self_check() -> None:
     with tempfile.TemporaryDirectory(prefix="harness-handoff-test-") as temporary:
         workspace = Path(temporary).resolve()
         helper.git(workspace, "init", "--initial-branch=harness-fixture")
+        assert helper.repository_boundary(workspace) == workspace
         (workspace / ".git" / "info" / "exclude").write_text(".trellis/\n", encoding="utf-8")
         baseline = invoke(workspace, "snapshot")
         assert baseline["head"] == "UNBORN" and baseline["dirty"] is False

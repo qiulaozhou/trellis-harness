@@ -4,6 +4,14 @@ All notable changes to Trellis Harness are documented here.
 
 ## Unreleased
 
+## 0.3.4 - 2026-11-13
+
+- Added per-check `authorization: explicit`; explicit checks stay blocked until the caller passes `--allow-explicit-checks`.
+- Scoped Git access to the explicit workspace with command-level `safe.directory`, and switched snapshots to `diff-index` / `diff-files` for consistent Windows behavior.
+- Hardened Task and review path resolution without changing project-owned configuration.
+- Added implementation-time guidance for justified guards, trust-boundary validation, fast failure, minimal structure and diffs, and comment intent.
+- Expanded semantic review rules for speculative fallbacks, single-call abstractions, and low-value or planning-heavy comments.
+
 ## 0.3.3 - 2026-11-13
 
 - Added Trellis project version `0.6.17` to the tested compatibility matrix.

@@ -59,15 +59,19 @@ if (-not $harnessPython -or -not (Test-Path -LiteralPath $harnessPython)) { thro
 
 1. 确认 active Task，不修改任务状态。
 2. 执行 `quality_gate.py plan full --task <task-path>`。
-3. 执行不带 `--allow-side-effects` 的 Full Gate：
+3. 配置中 `authorization: explicit` 的检查默认是 `blocked`。只有用户明确授权这些检查
+   时，才可添加 `--allow-explicit-checks`；不要从“full 验证”推断出批量授权。用户只
+   授权单项检查时，直接执行该命令并记录证据，不要顺带运行其他显式检查。
+4. 执行不带 `--allow-side-effects` 的 Full Gate：
 
    ```powershell
    & $harnessPython -B -X utf8 .trellis/scripts/harness/quality_gate.py run full --task <task-path>
    ```
 
-4. Acceptance Criteria 由 Trellis Check/finish-work 的任务级证据负责，不在通用 runner 中伪造 pass。旧 profile 中的 `acceptance-criteria` runner 会明确 `skipped` 并说明已委托 Trellis Check。
-5. build 或其他非 `none` 检查默认不得运行。默认 profile 的 build readiness 是 optional；未授权时仍输出 `Build requires explicit side-effect authorization.` 并为 `blocked`，但不单独阻断 Full Gate。项目 profile 将 build 标记为 required 时，它仍会阻断。
-6. 如果 required check 是 `fail` 或 `blocked`，明确输出 `Full Gate is not complete.`，不得建议 archive 或把结果降级成 pass。
+   已获得整批显式检查授权时，再添加 `--allow-explicit-checks`。
+5. Acceptance Criteria 由 Trellis Check/finish-work 的任务级证据负责，不在通用 runner 中伪造 pass。旧 profile 中的 `acceptance-criteria` runner 会明确 `skipped` 并说明已委托 Trellis Check。
+6. build 或其他非 `none` 检查默认不得运行。默认 profile 的 build readiness 是 optional；未授权时仍输出 `Build requires explicit side-effect authorization.` 并为 `blocked`，但不单独阻断 Full Gate。项目 profile 将 build 标记为 required 时，它仍会阻断。
+7. 如果 required check 是 `fail` 或 `blocked`，明确输出 `Full Gate is not complete.`，不得建议 archive 或把结果降级成 pass。
 
 ## Workspace Snapshot 与 Verification Scope
 
@@ -86,7 +90,7 @@ if (-not $harnessPython -or -not (Test-Path -LiteralPath $harnessPython)) { thro
 ## 结果纪律
 
 - 状态只允许 `pass`、`fail`、`blocked`、`skipped`。
-- exit code 非零默认是 `fail`；环境、权限、缺依赖或副作用授权不足是 `blocked`。
+- exit code 非零默认是 `fail`；环境、权限、缺依赖、显式检查授权或副作用授权不足是 `blocked`。
 - 当前项目没有正式测试脚本时，tests 必须为 `skipped`，原因 `no configured test suite`。
 - ESLint、Prettier 和 TypeScript 只使用项目已有的 `node_modules/.bin`；缺少工具时为 `blocked`，不得通过 `npm exec` 下载。
 - runner 执行结束后重新获取 snapshot；执行期间工作区发生变化时追加 required `workspace-stability` fail，并把 artifact 绑定到最终状态。

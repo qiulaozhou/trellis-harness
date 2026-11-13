@@ -154,6 +154,28 @@ class QualityGateTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "runner must be one of"):
             quality_gate.load_config(workspace)
 
+    def test_config_rejects_unknown_authorization(self) -> None:
+        """Authorization 只接受 none 或 explicit，避免拼写错误绕过门禁。"""
+        workspace = self.make_workspace(
+            {
+                "fast": [
+                    {
+                        "id": "invalid",
+                        "description": "invalid",
+                        "enabled": True,
+                        "required": True,
+                        "command": self.command(0),
+                        "authorization": "yes",
+                        "scope": "fixture",
+                        "side_effect_level": "none",
+                    }
+                ],
+                "full": [],
+            }
+        )
+        with self.assertRaisesRegex(ValueError, "authorization must be none or explicit"):
+            quality_gate.load_config(workspace)
+
     def test_write_scope_creates_and_updates_explicit_scope(self) -> None:
         """显式文件清单可创建并覆盖同一 Task 的 Verification Scope。"""
         workspace = self.make_workspace({"fast": [], "full": []})
@@ -245,6 +267,52 @@ class QualityGateTests(unittest.TestCase):
         """未知状态不能进入 verification.json。"""
         with self.assertRaisesRegex(ValueError, "check status must be one of"):
             quality_gate.overall_status([{"status": "unknown"}])
+
+    def test_explicit_authorization_blocks_until_allowed(self) -> None:
+        """显式授权检查未获允许时 blocked，获允许后才能执行。"""
+        workspace = self.make_workspace(
+            {
+                "fast": [
+                    {
+                        "id": "explicit",
+                        "description": "explicit",
+                        "enabled": True,
+                        "required": True,
+                        "command": self.command(0),
+                        "authorization": "explicit",
+                        "scope": "fixture",
+                        "side_effect_level": "none",
+                    }
+                ],
+                "full": [],
+            }
+        )
+        config = quality_gate.load_config(workspace)
+        snapshot = quality_gate.session_handoff.snapshot(workspace)
+        blocked_plan = quality_gate.plan_gate("fast", config, snapshot)
+        allowed_plan = quality_gate.plan_gate(
+            "fast", config, snapshot, allow_explicit_checks=True
+        )
+        blocked = quality_gate.run_gate("fast", config, snapshot, False)
+        allowed = quality_gate.run_gate(
+            "fast", config, snapshot, False, allow_explicit_checks=True
+        )
+        self.assertEqual(blocked_plan["checks"][0]["status"], "blocked")
+        self.assertEqual(allowed_plan["checks"][0]["action"], "run")
+        self.assertEqual(blocked["checks"][0]["status"], "blocked")
+        self.assertIn("Explicit user authorization", blocked["checks"][0]["evidence"])
+        self.assertEqual(allowed["checks"][0]["status"], "pass")
+
+    def test_git_command_uses_scoped_safe_directory(self) -> None:
+        """Git 检查只对显式工作区加入 safe.directory，不修改全局配置。"""
+        workspace = self.make_workspace({"fast": [], "full": []})
+        command = quality_gate.secure_command(
+            workspace, ["git", "--no-optional-locks", "diff-files", "--check"]
+        )
+        self.assertEqual(
+            command[:3],
+            ["git", "-c", f"safe.directory={workspace}"],
+        )
 
     def test_tests_skip_and_build_block(self) -> None:
         """缺少正式 test 脚本时 skipped，build 未授权时 blocked。"""

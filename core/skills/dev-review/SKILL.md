@@ -62,9 +62,12 @@ stack 冲突或 scope 内没有可审查 Git 修改时返回 BLOCKED；不要扩
 仅对 context 的 `review_files` 执行 staged/unstaged Git diff，并读取其中 untracked 文件：
 
 ```powershell
-git --no-optional-locks diff --cached -- <review-files>
-git --no-optional-locks diff -- <review-files>
+git --no-optional-locks diff-index --cached HEAD -- <review-files>
+git --no-optional-locks diff-files -- <review-files>
 ```
+
+若 Git 因仓库所有权拒绝访问，只为这些命令添加
+`-c safe.directory=<repo-root>`，不要修改全局 Git 配置。
 
 只在某个 Finding 无法判断时，读取修改文件的直接依赖上下文，例如 imported helper、API
 type、store 或 parent/child contract。每次 targeted read 都必须能说明与具体判断的关系；

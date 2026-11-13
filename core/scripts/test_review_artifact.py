@@ -44,7 +44,13 @@ class DevReviewTests(unittest.TestCase):
         self.temporary.cleanup()
 
     def git(self, *args: str) -> None:
-        result = subprocess.run(["git", *args], cwd=self.workspace, capture_output=True, text=True, check=False)
+        result = subprocess.run(
+            ["git", "-c", f"safe.directory={self.workspace}", *args],
+            cwd=self.workspace,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
         if result.returncode:
             raise AssertionError(result.stderr)
 

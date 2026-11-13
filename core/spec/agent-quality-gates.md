@@ -10,6 +10,7 @@ Harness Core，不记录某一个业务项目的 package scripts、build 行为�
 - 项目实际 `package.json`、本地 `node_modules/.bin` 和 Task artifacts 决定命令是否可运行，不从模板假设某个项目一定有 lint、typecheck、test 或 build。
 - 验证状态只能是 `pass`、`fail`、`blocked`、`skipped`。
 - 每次正式 `dev-verify` 只覆盖当前 Task 的 `verification.json`，不维护第二套数据库。
+- 检查的 `authorization` 只能是 `none` 或 `explicit`；缺失时按 `none` 处理。
 
 ## Verification Scope
 
@@ -35,11 +36,22 @@ include/exclude 一并稳定序列化后计算 SHA-256；不使用 mtime+size �
 
 ## Runner 能力
 
-- `git diff --check` 直接调用 Git。
+- `git diff --check` 直接调用 Git；runner 只对显式工作区注入 `safe.directory`，不修改全局 Git 配置。
 - targeted ESLint、Prettier、TypeScript 和 full TypeScript 只调用当前项目已有的 `node_modules/.bin`；工具缺失为 `blocked`，不得通过 `npm exec` 下载。
 - full lint、tests 和 build 调用项目配置的 npm script。当前公开 profile 只保证 npm；其他包管理器需要项目自定义 profile。
 - 没有正式 `test` script 时 tests 为 `skipped`，原因是 `no configured test suite`。
 - Acceptance Criteria 属于 Trellis Check/finish-work 的 Task 证据。旧 profile 中的 `acceptance-criteria` runner 会 `skipped` 并明确委托关系，不伪造 pass。
+
+### Explicit Authorization
+
+`authorization: explicit` 用于必须由用户明确授权的检查，例如 lint、format check、
+typecheck 或 tests。`plan` 和 `run` 在未收到授权时都必须返回 `blocked`，不能因为命令
+无副作用就自动执行。
+
+只有用户明确授权这些检查时，调用方才可传入 `--allow-explicit-checks`。只说“full
+验证”或“继续”不构成授权；用户只授权单项检查时，不得通过批量开关顺带运行其他显式
+检查。该开关与 `--allow-side-effects` 职责不同：前者授权检查本身，后者授权会修改
+仓库或外部状态的命令。
 
 ## Gate 规则
 

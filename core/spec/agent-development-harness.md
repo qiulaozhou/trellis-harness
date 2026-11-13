@@ -28,6 +28,18 @@ Task Done：只有 Acceptance Criteria、必要验证、Check 以及用户/现�
 
 需要子 Agent 时遵循用户当前的模型、推理强度和授权偏好；没有明确分工收益时优先由主 Agent 完成。
 
+## 实现质量与注释
+
+编码前读取本节，在实现时直接遵守，不等 Review 阶段补漏。
+
+- **真实依据**：新增判空、默认值、`catch`、状态、辅助函数或兼容分支前，必须能指出真实触发路径、可复现问题或现有契约要求；不得只为假设中的将来需求增加代码。
+- **信任边界**：外部输入在入口校验、归一化一次，内部使用强类型数据；不重复校验已由边界、类型或调用约定保证的条件。
+- **快速失败**：意外情况尽早抛出并向上传播。只有当前层需要恢复、反馈、转换异常语义或补充关键上下文时才捕获；不吞异常，不做纯 re-throw、重复日志或静默 fallback。
+- **最小结构**：一次性逻辑就地实现；只有具备复用价值、独立职责或明显可读性收益时才提取。复用既有 owner，不新增并行 wrapper、重复状态、公共入口或为未来准备的 scaffolding。
+- **最小变更**：保持既有命名、目录和模式，只修改完成需求所需的路径；不顺手重构，不加入未使用的参数、配置、导出或兼容分支。
+- **注释只写原因**：代码应自解释，注释默认不写；只有非显然原因、不变量、兼容约束或副作用需要说明时才写。禁止复述类型、控制流或代码步骤，记录修改历史，或写入任务、阶段、批次、优先级、验收编号（如 `P0`—`P3`、`C1`—`C3`、`AC27`）。
+- **完成前自检**：逐项检查本轮新增的分支、异常处理、状态和辅助函数，删除没有依据的防御、未使用代码和低价值注释。
+
 ## 本机 Python 与只读 Helper
 
 Harness 只依赖 Python 3.9+ 标准库，不安装第三方依赖。PowerShell 中依次解析当前机器可用的 `python`、`py`：
@@ -57,7 +69,7 @@ Helper 四个子命令均可带 `--workspace <当前工作区路径>`，默认 c
 
 只有唯一 workspace 与 branch 同时匹配的候选可自动采用。时间只改善展示顺序，不能用于在多个同等候选中猜任务；唯一但 workspace/branch 不匹配也不能自动采用。无有效候选时要求明确已有 Task 路径，不创建任务。
 
-指纹使用 staged/unstaged diff 与排序后的未跟踪文件路径及 lstat 元数据（size、mtime_ns）。Git diff 仅在内存计算摘要，不输出正文；不额外读取未跟踪文件正文。Git 关闭 optional locks、external diff 和 textconv。
+指纹使用 staged/unstaged diff 与排序后的未跟踪文件路径及 lstat 元数据（size、mtime_ns）。Git diff 仅在内存计算摘要，不输出正文；不额外读取未跟踪文件正文。Git 关闭 optional locks、external diff 和 textconv，并只对显式工作区使用命令级 `safe.directory`，不修改全局配置。
 
 限制：ignored 文件、外部依赖/环境变化不在指纹范围；未跟踪内容变化但 size/mtime_ns 被保留时可能漏检。它是工作区变化探测，不是安全证明。同指纹也不能让未执行的测试变成 pass；进行 snapshot/compare 时避免并行修改工作区。无提交的临时仓库 HEAD 为 `UNBORN`，分离 HEAD 的 branch 使用 helper 实际返回值。
 
@@ -142,7 +154,8 @@ resume 通过现有 `task.py start <task-path>` 绑定，随后 `task.py current
 
 ```powershell
 & $harnessPython -B -X utf8 .trellis/scripts/harness/test_session_handoff.py
-git --no-optional-locks diff --check
+git --no-optional-locks diff-files --check
+git --no-optional-locks diff-index --cached --check HEAD
 ```
 
 自测只写临时 fixture，覆盖指纹、非法/缺失字段、archive/completed 拒绝、stale 和候选歧义。新增文件是独立本地扩展；不修改 managed hashes，不为发现 Skill 改写 AGENTS.md。当前工作区忽略 Harness 目录，跨机器或新 clone 的同步另行处理。

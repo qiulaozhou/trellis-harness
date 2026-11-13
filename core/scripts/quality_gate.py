@@ -20,6 +20,7 @@ import session_handoff
 
 ALLOWED_STATUSES = {"pass", "fail", "blocked", "skipped"}
 SIDE_EFFECT_LEVELS = {"none", "repo_write", "external", "destructive"}
+CHECK_AUTHORIZATIONS = {"none", "explicit"}
 KNOWN_RUNNERS = {
     "acceptance-criteria",
     "targeted-eslint",
@@ -81,6 +82,9 @@ def load_config(workspace: Path) -> dict[str, list[dict[str, Any]]]:
             side_effect_level = check["side_effect_level"]
             if not isinstance(side_effect_level, str) or side_effect_level not in SIDE_EFFECT_LEVELS:
                 raise ValueError(f"{gate}/{check_id}: invalid side_effect_level.")
+            authorization = check.get("authorization", "none")
+            if not isinstance(authorization, str) or authorization not in CHECK_AUTHORIZATIONS:
+                raise ValueError(f"{gate}/{check_id}: authorization must be none or explicit.")
             if "command" not in check and "runner" not in check:
                 raise ValueError(f"{gate}/{check_id}: command or runner is required.")
             if "runner" in check:
@@ -136,9 +140,9 @@ def task_path(workspace: Path, task: str | Path) -> Path:
     path = Path(task)
     if not path.is_absolute():
         path = workspace / path
-    path = path.resolve(strict=True)
-    tasks = (workspace / ".trellis" / "tasks").resolve(strict=True)
-    if path.parent != tasks or path.name.lower() == "archive":
+    path = path.resolve(strict=False)
+    tasks = (workspace / ".trellis" / "tasks").resolve(strict=False)
+    if not path.is_dir() or path.parent != tasks or path.name.lower() == "archive":
         raise ValueError("Task must be a direct non-archive .trellis/tasks child.")
     return path
 
@@ -342,6 +346,14 @@ def command_text(command: list[str] | str | None) -> str:
     return " ".join(command)
 
 
+def secure_command(workspace: Path, command: list[str] | str | None) -> list[str] | str | None:
+    """给显式工作区的 Git 命令加入作用域内 safe.directory，不修改全局配置。"""
+    if not isinstance(command, list) or Path(command[0]).name.lower() not in {"git", "git.exe"}:
+        return command
+    safe_directory = session_handoff.repository_boundary(workspace)
+    return [command[0], "-c", f"safe.directory={safe_directory}", *command[1:]]
+
+
 def tail_evidence(stdout: bytes, stderr: bytes) -> str:
     """只保留终端输出尾部，避免把完整日志写入 Task artifact。"""
     output = (stdout + (b"\n" if stdout and stderr else b"") + stderr).decode(
@@ -444,21 +456,32 @@ def plan_gate(
     config: dict[str, list[dict[str, Any]]],
     snapshot: dict[str, Any],
     scope: dict[str, Any] | None = None,
+    allow_explicit_checks: bool = False,
 ) -> dict[str, Any]:
     """生成不执行命令的门禁计划，明确 run、blocked 与 skipped 决策。"""
     checks = []
     for check in config[gate]:
+        planned_command = secure_command(
+            Path(snapshot["workspace_path"]), resolve_runner(check, snapshot, gate, scope)
+        )
         item = {
             "id": check["id"],
             "description": check["description"],
             "runner": check.get("runner"),
             "required": check["required"],
+            "authorization": check.get("authorization", "none"),
             "scope": check["scope"],
             "side_effect_level": check["side_effect_level"],
-            "command": command_text(resolve_runner(check, snapshot, gate, scope)),
+            "command": command_text(planned_command),
         }
         if not check["enabled"]:
             item.update({"action": "skip", "status": "skipped", "reason": "disabled"})
+        elif check.get("authorization", "none") == "explicit" and not allow_explicit_checks:
+            item.update({
+                "action": "block",
+                "status": "blocked",
+                "reason": "Explicit user authorization is required for this check.",
+            })
         elif check.get("runner") == "acceptance-criteria":
             item.update({"action": "skip", "status": "skipped", "reason": "Acceptance criteria are delegated to Trellis Check."})
         elif check.get("runner") in {"targeted-eslint", "prettier-check", "typecheck"} and (
@@ -516,18 +539,22 @@ def run_gate(
     snapshot: dict[str, Any],
     allow_side_effects: bool,
     scope: dict[str, Any] | None = None,
+    allow_explicit_checks: bool = False,
 ) -> dict[str, Any]:
     """执行指定门禁并返回可写入 verification.json 的完整机器结果。"""
     started_at = utc_now()
     results = []
     for check in config[gate]:
-        planned_command = resolve_runner(check, snapshot, gate, scope)
+        planned_command = secure_command(
+            Path(snapshot["workspace_path"]), resolve_runner(check, snapshot, gate, scope)
+        )
         base = {
             "id": check["id"],
             "command": command_text(planned_command),
             "runner": check.get("runner"),
             "scope": check["scope"],
             "required": check["required"],
+            "authorization": check.get("authorization", "none"),
             "side_effect_level": check["side_effect_level"],
             "failure_scope": (
                 "task"
@@ -543,6 +570,11 @@ def run_gate(
         }
         if not check["enabled"]:
             base["evidence"] = "disabled"
+            results.append(base)
+            continue
+        if check.get("authorization", "none") == "explicit" and not allow_explicit_checks:
+            base["status"] = "blocked"
+            base["evidence"] = "Explicit user authorization is required for this check."
             results.append(base)
             continue
         if check.get("runner") == "acceptance-criteria":
@@ -644,9 +676,9 @@ def run_gate(
 
 def write_verification(task: Path, workspace: Path, result: dict[str, Any]) -> Path:
     """保存当前 Task 最近一次正式 Gate，覆盖前不建立额外历史数据库。"""
-    task = task.resolve(strict=True)
-    tasks = (workspace / ".trellis" / "tasks").resolve(strict=True)
-    if task.parent != tasks or task.name.lower() == "archive":
+    task = task.resolve(strict=False)
+    tasks = (workspace / ".trellis" / "tasks").resolve(strict=False)
+    if not task.is_dir() or task.parent != tasks or task.name.lower() == "archive":
         raise ValueError("verification Task must be a direct non-archive .trellis/tasks child.")
     artifact = task / "verification.json"
     payload = {
@@ -689,7 +721,8 @@ def check_current(verification: Path, workspace: Path) -> dict[str, Any]:
         "head_changed": saved["head"].lower() != current["head"].lower(),
         "diff_changed": saved.get("diff_fingerprint") != current["diff_fingerprint"],
         "branch_changed": saved.get("branch") != current["branch"],
-        "workspace_changed": Path(saved.get("workspace_path", "")).resolve() != Path(current["workspace_path"]).resolve(),
+        "workspace_changed": Path(saved.get("workspace_path", "")).resolve(strict=False)
+        != Path(current["workspace_path"]).resolve(strict=False),
     }
     workspace_changed = any(workspace_differences.values())
     saved_scope = data.get("verification_scope")
@@ -743,7 +776,7 @@ def resolve_task(workspace: Path, task: str | None) -> Path | None:
 
 
 def main() -> int:
-    """提供 plan、run、check-current 三个只读/显式 artifact 命令。"""
+    """提供 scope、plan、run、check-current 命令。"""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--workspace", default=".", help="Git worktree or a directory within it")
     commands = parser.add_subparsers(dest="command", required=True)
@@ -751,6 +784,7 @@ def main() -> int:
         command = commands.add_parser(name)
         command.add_argument("gate", choices=("fast", "full"))
         command.add_argument("--task", help="Task path used to resolve Verification Scope")
+        command.add_argument("--allow-explicit-checks", action="store_true")
         if name == "run":
             command.add_argument("--allow-side-effects", action="store_true")
     scope_parser = commands.add_parser("scope")
@@ -771,17 +805,30 @@ def main() -> int:
             path = Path(args.verification)
             if not path.is_absolute():
                 path = workspace / path
-            result = check_current(path.resolve(strict=True), workspace)
+            result = check_current(path.resolve(strict=False), workspace)
             print(json.dumps(result, ensure_ascii=False, indent=2))
             return 0
         current_snapshot = session_handoff.snapshot(workspace)
         config = load_config(workspace)
         scope = resolve_scope(workspace, args.task, current_snapshot)
         if args.command == "plan":
-            result = plan_gate(args.gate, config, current_snapshot, scope)
+            result = plan_gate(
+                args.gate,
+                config,
+                current_snapshot,
+                scope,
+                allow_explicit_checks=args.allow_explicit_checks,
+            )
             print(json.dumps(result, ensure_ascii=False, indent=2))
             return 0
-        result = run_gate(args.gate, config, current_snapshot, args.allow_side_effects, scope)
+        result = run_gate(
+            args.gate,
+            config,
+            current_snapshot,
+            args.allow_side_effects,
+            scope,
+            allow_explicit_checks=args.allow_explicit_checks,
+        )
         task = resolve_task(workspace, args.task)
         if task:
             result["verification_artifact"] = str(write_verification(task, workspace, result))

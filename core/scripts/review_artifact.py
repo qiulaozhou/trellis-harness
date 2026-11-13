@@ -40,15 +40,22 @@ def names(output: bytes) -> list[str]:
 def lightweight_snapshot(workspace: Path) -> dict[str, Any]:
     """Collect only names and revision data; never load a workspace-wide diff."""
     options = ("--no-ext-diff", "--no-textconv", "--no-renames", "--name-only", "-z")
-    staged = names(session_handoff.git(workspace, "diff", "--cached", *options))
-    unstaged = names(session_handoff.git(workspace, "diff", *options))
-    untracked = names(session_handoff.git(workspace, "ls-files", "--others", "--exclude-standard", "-z"))
     branch = session_handoff.git(
         workspace, "symbolic-ref", "--quiet", "--short", "HEAD", allowed=(0, 1)
     ).decode().strip() or "DETACHED"
     head = session_handoff.git(
         workspace, "rev-parse", "--verify", "--quiet", "HEAD", allowed=(0, 1)
     ).decode().strip() or "UNBORN"
+    staged_base = head
+    if head == "UNBORN":
+        staged_base = session_handoff.git(
+            workspace, "hash-object", "-t", "tree", "--stdin", input_data=b""
+        ).decode().strip()
+    staged = names(session_handoff.git(
+        workspace, "diff-index", "--cached", staged_base, *options
+    ))
+    unstaged = names(session_handoff.git(workspace, "diff-files", *options))
+    untracked = names(session_handoff.git(workspace, "ls-files", "--others", "--exclude-standard", "-z"))
     return {
         "branch": branch,
         "head": head,
@@ -246,7 +253,8 @@ def check_current(review: Path, workspace: Path) -> dict[str, Any]:
 
 def resolve_file(workspace: Path, value: str) -> Path:
     path = Path(value)
-    return (workspace / path).resolve(strict=True) if not path.is_absolute() else path.resolve(strict=True)
+    candidate = (workspace / path) if not path.is_absolute() else path
+    return candidate.resolve(strict=False)
 
 
 def main() -> int:

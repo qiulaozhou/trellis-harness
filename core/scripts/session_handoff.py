@@ -23,15 +23,32 @@ STATUSES = {"pass", "fail", "blocked", "skipped"}
 SNAPSHOT_PATHS = ("--", ".", ":(exclude,glob).trellis/tasks/*/verification.json")
 
 
-def git(workspace: Path, *args: str, allowed: tuple[int, ...] = (0,)) -> bytes:
+def repository_boundary(workspace: Path) -> Path:
+    """找到显式工作区所在仓库根，供 Git 所有权检查使用。"""
+    for candidate in (workspace, *workspace.parents):
+        if (candidate / ".git").exists():
+            return candidate
+    return workspace
+
+
+def git(
+    workspace: Path,
+    *args: str,
+    allowed: tuple[int, ...] = (0,),
+    input_data: bytes | None = None,
+) -> bytes:
     """保留 Git 原始字节；现有公共封装会替换解码错误，不适合稳定指纹。"""
     # 不让外部 Git 环境变量把显式工作区重定向到其他仓库或 index。
     environment = os.environ.copy()
     for name in ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_COMMON_DIR"):
         environment.pop(name, None)
+    safe_directory = repository_boundary(workspace)
     result = subprocess.run(
-        ["git", "--no-optional-locks", "-c", "core.fsmonitor=false", *args], cwd=workspace,
-        capture_output=True, env=environment, timeout=60,
+        [
+            "git", "--no-optional-locks", "-c", "core.fsmonitor=false",
+            "-c", f"safe.directory={safe_directory}", *args,
+        ],
+        cwd=workspace, capture_output=True, env=environment, input=input_data, timeout=60,
     )
     if result.returncode not in allowed:
         # stderr 可能包含敏感路径或外部程序输出；只报告操作与退出码。
@@ -41,8 +58,10 @@ def git(workspace: Path, *args: str, allowed: tuple[int, ...] = (0,)) -> bytes:
 
 def repository(workspace: str | Path) -> Path:
     """将 cwd 或显式目录归一到当前 Git worktree 根目录。"""
-    directory = Path(workspace).resolve(strict=True)
-    return Path(os.fsdecode(git(directory, "rev-parse", "--show-toplevel").strip())).resolve()
+    directory = Path(workspace).resolve(strict=False)
+    if not directory.is_dir():
+        raise ValueError(f"Workspace does not exist or is not a directory: {directory}")
+    return Path(os.fsdecode(git(directory, "rev-parse", "--show-toplevel").strip())).resolve(strict=False)
 
 
 def snapshot(workspace: Path) -> dict:
@@ -55,13 +74,25 @@ def snapshot(workspace: Path) -> dict:
     )
     # verification.json is the Gate's generated runtime artifact; including it would
     # make a freshly written verification stale itself.
-    staged = git(workspace, "diff", "--cached", *options, "--binary", "--full-index", *SNAPSHOT_PATHS)
-    unstaged = git(workspace, "diff", *options, "--binary", "--full-index", *SNAPSHOT_PATHS)
+    head = git(
+        workspace, "rev-parse", "--verify", "--quiet", "HEAD", allowed=(0, 1)
+    ).decode().strip() or "UNBORN"
+    staged_base = head
+    if head == "UNBORN":
+        staged_base = git(
+            workspace, "hash-object", "-t", "tree", "--stdin", input_data=b""
+        ).decode().strip()
+    staged = git(
+        workspace, "diff-index", "--cached", staged_base, *options, "--binary", "--full-index",
+        *SNAPSHOT_PATHS,
+    )
+    unstaged = git(workspace, "diff-files", *options, "--binary", "--full-index", *SNAPSHOT_PATHS)
     staged_files = sorted(os.fsdecode(item) for item in git(
-        workspace, "diff", "--cached", *options, "--name-only", "-z", *SNAPSHOT_PATHS
+        workspace, "diff-index", "--cached", staged_base, *options, "--name-only", "-z",
+        *SNAPSHOT_PATHS,
     ).split(b"\0") if item)
     unstaged_files = sorted(os.fsdecode(item) for item in git(
-        workspace, "diff", *options, "--name-only", "-z", *SNAPSHOT_PATHS
+        workspace, "diff-files", *options, "--name-only", "-z", *SNAPSHOT_PATHS
     ).split(b"\0") if item)
     untracked_files = sorted(os.fsdecode(item) for item in git(
         workspace, "ls-files", "--others", "--exclude-standard", "-z", *SNAPSHOT_PATHS
@@ -69,7 +100,7 @@ def snapshot(workspace: Path) -> dict:
     untracked_metadata = []
     for name in untracked_files:
         path = workspace / name
-        if not path.parent.resolve().is_relative_to(workspace):
+        if not path.parent.resolve(strict=False).is_relative_to(workspace):
             raise ValueError("Untracked path resolves outside workspace; retry after inspecting Git state.")
         metadata = path.lstat()
         untracked_metadata.append([name, metadata.st_size, metadata.st_mtime_ns])
@@ -81,7 +112,7 @@ def snapshot(workspace: Path) -> dict:
     return {
         "repository_root": str(workspace), "workspace_path": str(workspace),
         "branch": git(workspace, "symbolic-ref", "--quiet", "--short", "HEAD", allowed=(0, 1)).decode().strip() or "DETACHED",
-        "head": git(workspace, "rev-parse", "--verify", "--quiet", "HEAD", allowed=(0, 1)).decode().strip() or "UNBORN",
+        "head": head,
         "dirty": bool(staged_files or unstaged_files or untracked_files),
         "staged_changed_files": staged_files, "unstaged_changed_files": unstaged_files,
         "untracked_files": untracked_files, "diff_fingerprint": fingerprint.hexdigest(),
@@ -136,13 +167,14 @@ def read_handoff(handoff: str | Path, workspace: Path) -> dict:
     path = Path(os.path.abspath(path))
     tasks = workspace / ".trellis" / "tasks"
     task = path.parent
-    if (tasks.resolve() != tasks or task.parent != tasks or task.name.lower() == "archive"
-            or task.resolve() != task or path.name != "handoff.md" or path.resolve() != path):
+    if (tasks.resolve(strict=False) != tasks or task.parent != tasks or task.name.lower() == "archive"
+            or task.resolve(strict=False) != task or path.name != "handoff.md"
+            or path.resolve(strict=False) != path):
         raise ValueError("handoff must be a real handoff.md in a direct, non-archive .trellis/tasks/<task> directory; symlink/junction aliases are not allowed.")
     if not path.is_file():
         raise ValueError("handoff.md does not exist in the specified Task.")
     metadata_path = task / "task.json"
-    if metadata_path.resolve() != metadata_path or not metadata_path.is_file():
+    if metadata_path.resolve(strict=False) != metadata_path or not metadata_path.is_file():
         raise ValueError("Task task.json is missing or resolves through a symlink/junction.")
     metadata = json.loads(metadata_path.read_text(encoding="utf-8-sig"))
     if not isinstance(metadata, dict) or not isinstance(metadata.get("status"), str) or not metadata["status"].strip():
@@ -172,7 +204,7 @@ def read_handoff(handoff: str | Path, workspace: Path) -> dict:
     identity_task = Path(identity["Task"])
     if not identity_task.is_absolute():
         identity_task = workspace / identity_task
-    if identity_task.resolve() != task or Path(os.path.abspath(identity_task)) != task:
+    if identity_task.resolve(strict=False) != task or Path(os.path.abspath(identity_task)) != task:
         errors.append("Identity: Task must name the same direct Task directory containing handoff.md.")
     if not Path(identity["Workspace"]).is_absolute():
         errors.append("Identity: Workspace must be an absolute path.")
@@ -215,7 +247,8 @@ def compare(handoff: dict, current: dict) -> dict:
         "head_changed": saved["HEAD"].lower() != current["head"].lower(),
         "diff_changed": saved["Diff Fingerprint"].lower() != current["diff_fingerprint"].lower(),
         "branch_changed": saved["Branch"] != current["branch"],
-        "workspace_changed": Path(handoff["identity"]["Workspace"]).resolve() != Path(current["workspace_path"]),
+        "workspace_changed": Path(handoff["identity"]["Workspace"]).resolve(strict=False)
+        != Path(current["workspace_path"]).resolve(strict=False),
     }
     stale = any(changes.values())
     return {
@@ -232,7 +265,7 @@ def candidates(workspace: Path) -> dict:
     found = []
     rejected = []
     tasks = workspace / ".trellis" / "tasks"
-    if tasks.resolve() != tasks:
+    if tasks.resolve(strict=False) != tasks:
         raise ValueError(".trellis/tasks resolves through a symlink/junction.")
     for task in sorted(tasks.iterdir()) if tasks.is_dir() else []:
         if task.name.lower() == "archive" or not task.is_dir() or not (task / "handoff.md").is_file():

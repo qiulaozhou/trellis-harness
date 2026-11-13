@@ -1,156 +1,93 @@
 # Trellis Harness Overlay
 
-> Development Distribution：此副本用于开发维护。业务项目使用独立的 `0.3.3` Stable Distribution。
+![version](https://img.shields.io/badge/version-0.3.4-blue)
+![python](https://img.shields.io/badge/python-3.9%2B-green)
+![platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS-lightgrey)
 
-版本 `0.3.3` 是面向已包含 `.trellis/.version` 项目的增量式 Harness Core。它不会初始化或升级 Trellis。
+在已初始化的 Trellis 项目上叠加一套 Agent 开发工作流：需求澄清、任务启动、断点续作、质量门禁和代码 Review。
 
-`0.3.3` 将 Trellis 项目版本 `0.6.17` 纳入已测试兼容矩阵。
+> Harness 不会安装、初始化或升级 Trellis，只管理自己的 Core 文件。
 
-`0.3.2` 新增按工作规模选择 Agent 的规则：低风险、逻辑明确的局部修改由主 Agent 直接实现和检查；较大、可并行、批量重复或需要独立复核的工作再分发子 Agent。复用已加载上下文，只运行必要的定向验证。规则通过受管 Core 规范及 `dev-start` / `dev-resume` 入口分发，`install` / `sync` 不改写项目的 `AGENTS.md` 或官方 workflow；显式 Quality Gate、只读 Review 和 Resume STOP 保持原契约。
+## 特性
 
-## 支持的平台
+- **六个 `dev-*` Skills**：覆盖从需求到 Review 的完整开发循环
+- **质量门禁**：按 profile 执行 lint / typecheck / test 等确定性检查
+- **技术栈 Review**：内置 Next.js、React、Vue 2、Vue 3 规范
+- **安全同步**：`sync` 只更新受管 Core 文件，不碰项目数据和本地配置
+- **零依赖**：仅使用 Python 标准库
 
-| 平台 | 支持情况 | 命令启动器 |
-| --- | --- | --- |
-| Windows | 支持 | `harness.cmd` |
-| macOS 13+ | 支持 Intel 和 Apple Silicon | `harness` |
-| Linux | 当前不支持 | 无 |
+## 环境要求
 
-## 前置条件
+- Git、Python 3.9+
+- Windows 或 macOS 13+（暂不支持 Linux）
+- 已初始化的 Trellis 项目（存在 `.trellis/.version`），已测试版本 `0.6.12` / `0.6.15` / `0.6.17`
+- 默认质量门禁 profile 面向 npm 项目
 
-- Git
-- Python 3.9 或更高版本；Harness 只使用 Python 标准库
-- 单独安装 Trellis CLI
-- 已经通过 `.trellis/.version` 完成初始化的 Trellis 项目
-- 默认质量门禁 profile 当前支持 npm 项目；其他包管理器需要项目自定义 profile
-- 安装后在 Codex 中重新打开项目，使其能够发现 `.agents/skills/dev-*`
+## 安装
 
-Harness 不会安装或初始化 Trellis。请先按照项目所需的官方 Trellis 流程完成设置，然后验证：
+克隆仓库并将目录加入 `PATH`。
 
-```powershell
-Test-Path .trellis/.version
-trellis --version
-```
-
-在 macOS 上，请在 Terminal 中执行对应检查：
-
-```sh
-test -f .trellis/.version
-trellis --version
-```
-
-当前已测试的项目版本为 Trellis `0.6.12`、`0.6.15` 和 `0.6.17`；当前已测试的 CLI 版本为 `0.6.15` 和 `0.6.17`。
-
-## Windows：克隆并注册命令
-
-克隆本仓库后，在克隆目录中执行：
+**Windows（PowerShell）**
 
 ```powershell
-$harnessRoot = (Get-Location).Path
-
-# 仅对当前 PowerShell 会话生效。
-$env:Path = "$harnessRoot;$env:Path"
-
-# 可选：将目录持久化到当前用户的 PATH。
-$userPath = [Environment]::GetEnvironmentVariable('Path', 'User') -split ';' | Where-Object { $_ }
-if ($userPath -notcontains $harnessRoot) {
-  [Environment]::SetEnvironmentVariable('Path', (($userPath + $harnessRoot) -join ';'), 'User')
-}
-```
-
-完成持久化注册后，请打开新的 PowerShell 窗口并验证：
-
-```powershell
+git clone <repo-url> trellis-harness
+cd trellis-harness
+$env:Path = "$(Get-Location);$env:Path"   # 当前会话生效；持久化请加入用户 PATH
 Get-Command harness
-where.exe harness
 ```
 
-如需从当前用户的 PATH 中移除该克隆目录：
-
-```powershell
-$harnessRoot = 'C:\path\to\trellis-harness'
-$userPath = [Environment]::GetEnvironmentVariable('Path', 'User') -split ';' | Where-Object { $_ -and $_ -ne $harnessRoot }
-[Environment]::SetEnvironmentVariable('Path', ($userPath -join ';'), 'User')
-```
-
-Windows wrapper 会先尝试 `python`，再尝试 `py`。如果两者都不可用，它会输出明确的前置条件错误并退出。它不会自动修改 PATH。
-
-## macOS：克隆并注册命令
-
-在克隆目录中执行：
+**macOS（zsh）**
 
 ```sh
+git clone <repo-url> trellis-harness
+cd trellis-harness
 chmod +x ./harness
-
-# 仅对当前 Terminal 会话生效。
-export PATH="$(pwd):$PATH"
-
-command -v python3
+echo "export PATH=\"$(pwd):\$PATH\"" >> ~/.zshrc && source ~/.zshrc
 command -v harness
 ```
 
-如果找不到 `python3`，请使用适用于 Mac 的受信任 Python 安装程序或包管理器安装 Python 3.9 或更高版本，然后重新打开 Terminal。启动器会先尝试 `python3`，再尝试 `python`。
-
-如需在 zsh 中持久化该命令，请使用克隆目录的绝对路径，将其加入 `~/.zshrc`：
+## 快速开始
 
 ```sh
-echo 'export PATH="/absolute/path/to/trellis-harness:$PATH"' >> ~/.zshrc
-source ~/.zshrc
-command -v harness
-```
-
-如需移除，请从 `~/.zshrc` 中删除对应的 export 行，然后再次执行 `source ~/.zshrc`。系统不会自动修改 Shell 配置。
-
-也可以不注册 PATH，直接运行启动器：
-
-```sh
-./harness status --project /absolute/path/to/project
-```
-
-## 日常使用
-
-```text
-dev-grill "<new requirement>"
-dev-grill resume <intake-path>
-dev-start <requirement>
-dev-verify fast
-dev-checkpoint
-dev-resume <task-path>
-dev-review <task-path>
-dev-verify full
-```
-
-`dev-grill` 每次只询问一个重要的产品决策，并写入 requirement intake。它在恢复或更新 intake 后停止；不会创建 Task，也不会执行实现。当 intake 状态为 `READY` 时，请显式将它传给 `dev-start <intake-path>`，以创建正式 Task。
-
-第一次执行 `dev-verify fast` 前，Skill 会要求从当前 Task 的实际实现中确认 repo-relative 文件清单，并通过 `quality_gate.py scope` 写入 `verification-scope.json`；不会把工作区全部 dirty 文件猜成当前 Task。Full Gate 的 Acceptance Criteria 继续由 Trellis Check/finish-work 负责，未授权的 optional build readiness 会保留为 blocked，但不会单独阻断 Gate。
-
-## Distribution 命令
-
-请使用已经注册的命令，或者直接从本目录调用对应平台的启动器。该工具没有第三方依赖。
-
-```text
-harness status --project <project>
+# 安装到项目（可选 profile：nextjs / react / vue2 / vue3）
 harness install --project <project> --profile nextjs
+
+# 查看状态
+harness status --project <project>
+
+# Harness 更新后同步
 harness sync --project <project>
+
+# 批量管理工作区下的多个项目
 harness status-all <workspace-root>
 harness sync-all <workspace-root>
 ```
 
-`install` 要求项目已经完成 Trellis 初始化，并且 Trellis 项目版本受支持。只有在显式选择 profile，且项目不存在 `.trellis/harness/quality-gates.json` 时，才会复制 profile。Profiles 用于选择确定性的质量门禁，以及 `dev-review` 和 `dev-grill` 的技术栈 profile。`sync` 和 `sync-all` 只更新 `manifest.json` 中列出的 Core 路径；它们会保留 profiles、Tasks、handoffs、intake/verification/review artifacts、Journal、runtime、业务规格文件以及 `.trellis/.template-hashes.json`。已有但缺少 `review.profile` 或 `grill.profile` 的自定义 profile 不会被修改；需要时，Skills 会从 `package.json` 检测受支持的技术栈。
+安装后在 Codex 中重新打开项目，即可使用 `dev-*` Skills。
 
-如果 Core 文件存在本地修改，`install`/`sync` 会在写入前停止。只有在需要替换由 manifest 管理的 Core 文件时才使用 `--force`；它永远不会覆盖 profile 或项目数据。
+## 工作流
 
-安装后，如果六个 `dev-*` Skills 没有立即显示，请在 Codex 中重新打开项目。`harness status --project <project>` 会报告已安装的 Harness 版本、Trellis 项目版本、profile、兼容性状态以及受管理的 Core 状态。
+| 命令 | 作用 |
+| --- | --- |
+| `dev-grill "<需求>"` | 逐个追问关键产品决策，生成 requirement intake |
+| `dev-start <intake 或需求>` | 创建正式 Task 并开始实现 |
+| `dev-verify fast` / `full` | 运行快速 / 完整质量门禁 |
+| `dev-checkpoint` | 保存当前进度与交接信息 |
+| `dev-resume <task-path>` | 从断点恢复任务 |
+| `dev-review <task-path>` | 只读语义 Review |
 
-## 独立的生命周期
-
-官方 Trellis 与本 Overlay 使用独立的版本和命令：
+典型流程：
 
 ```text
-trellis upgrade             # global official CLI
-trellis update              # official files in one project
-trellis update --migrate    # only when official Trellis requires migration
-harness sync                # custom Harness Core only
+dev-grill → dev-start → dev-verify fast → dev-checkpoint → dev-review → dev-verify full
 ```
 
-不要将 Harness 版本当作 Trellis 版本。Harness 命令不会调用 `trellis upgrade`、`trellis update` 或 `trellis update --migrate`。
+## 注意事项
+
+- 本地修改过的 Core 文件会让 `install` / `sync` 中止；确认要覆盖时使用 `--force`（不会覆盖 profile 和项目数据）。
+- profile 中标记为 `authorization: explicit` 的检查默认被阻断，需用户明确授权后传入 `--allow-explicit-checks`。
+- Harness 与 Trellis 版本独立：升级 Trellis 用 `trellis upgrade` / `trellis update`，更新 Harness 用 `harness sync`。
+
+## 更新日志
+
+见 [CHANGELOG.md](./CHANGELOG.md)。

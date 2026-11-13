@@ -119,10 +119,26 @@ class HarnessDistributionTests(unittest.TestCase):
                 "任务规模与 Agent 分工" in (project / target).read_text(encoding="utf-8"),
                 f"Missing lightweight routing policy: {target}",
             )
+        self.assertIn(
+            "实现质量与注释",
+            (project / ".trellis/spec/agent-development-harness.md").read_text(encoding="utf-8"),
+        )
+        self.assertIn(
+            "实现质量与注释",
+            (project / ".agents/skills/dev-start/SKILL.md").read_text(encoding="utf-8"),
+        )
+        self.assertIn(
+            "无真实触发路径",
+            (project / ".agents/skills/dev-review/references/common.md").read_text(encoding="utf-8"),
+        )
         result = harness.sync(project, self.next_release())
         self.assertEqual(result["harness_status"], "current")
         self.assertIn(
             "任务规模与 Agent 分工",
+            (project / ".trellis/spec/agent-development-harness.md").read_text(encoding="utf-8"),
+        )
+        self.assertIn(
+            "实现质量与注释",
             (project / ".trellis/spec/agent-development-harness.md").read_text(encoding="utf-8"),
         )
         self.assertEqual(protected, {path: path.read_bytes() for path in protected})
