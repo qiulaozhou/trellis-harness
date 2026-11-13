@@ -280,6 +280,14 @@ class HarnessDistributionTests(unittest.TestCase):
         self.assertEqual(result["harness_status"], "current")
         self.assertEqual(harness.status(supported, self.release)["trellis_compatibility"]["status"], "supported")
 
+        supported_017 = self.project("supported-017", "0.6.17")
+        result = harness.install(supported_017, self.release)
+        self.assertEqual(result["harness_status"], "current")
+        self.assertEqual(
+            harness.status(supported_017, self.release)["trellis_compatibility"]["status"],
+            "supported",
+        )
+
         below_floor = self.project("below-floor", "0.6.11")
         with self.assertRaisesRegex(harness.HarnessError, "below minimum"):
             harness.install(below_floor, self.release)

@@ -4,6 +4,10 @@ All notable changes to Trellis Harness are documented here.
 
 ## Unreleased
 
+## 0.3.3 - 2026-11-13
+
+- Added Trellis project version `0.6.17` to the tested compatibility matrix.
+
 ## 0.3.2 - 2026-10-13
 
 - Added a lightweight exception to default Agent delegation: the main Agent implements and checks small, understood, low-risk changes directly, including follow-ups within an active Task.

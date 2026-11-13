@@ -1,8 +1,10 @@
 # Trellis Harness Overlay
 
-> Development Distribution：此副本用于开发维护。业务项目使用独立的 `0.3.2` Stable Distribution。
+> Development Distribution：此副本用于开发维护。业务项目使用独立的 `0.3.3` Stable Distribution。
 
-版本 `0.3.2` 是面向已包含 `.trellis/.version` 项目的增量式 Harness Core。它不会初始化或升级 Trellis。
+版本 `0.3.3` 是面向已包含 `.trellis/.version` 项目的增量式 Harness Core。它不会初始化或升级 Trellis。
+
+`0.3.3` 将 Trellis 项目版本 `0.6.17` 纳入已测试兼容矩阵。
 
 `0.3.2` 新增按工作规模选择 Agent 的规则：低风险、逻辑明确的局部修改由主 Agent 直接实现和检查；较大、可并行、批量重复或需要独立复核的工作再分发子 Agent。复用已加载上下文，只运行必要的定向验证。规则通过受管 Core 规范及 `dev-start` / `dev-resume` 入口分发，`install` / `sync` 不改写项目的 `AGENTS.md` 或官方 workflow；显式 Quality Gate、只读 Review 和 Resume STOP 保持原契约。
 
@@ -37,7 +39,7 @@ test -f .trellis/.version
 trellis --version
 ```
 
-当前已测试的项目版本为 Trellis `0.6.12` 和 `0.6.15`；当前已测试的 CLI 版本为 `0.6.15`。
+当前已测试的项目版本为 Trellis `0.6.12`、`0.6.15` 和 `0.6.17`；当前已测试的 CLI 版本为 `0.6.15` 和 `0.6.17`。
 
 ## Windows：克隆并注册命令
 
