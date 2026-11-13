@@ -23,7 +23,7 @@ SPEC.loader.exec_module(harness)
 class HarnessDistributionTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
-        self.root = Path(self.temporary.name)
+        self.root = Path(self.temporary.name).resolve()
         self.release = MODULE_PATH.parent.parent
 
     def tearDown(self) -> None:
